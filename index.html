@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>AR Utilities Demo - Final</title>
+
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- AR.js -->
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.min.js"></script>
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <style>
+      body { margin:0; overflow:hidden; }
+      #map { position:absolute; top:0; left:0; width:100%; height:100%; z-index:0; }
+      a-scene { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1; }
+    </style>
+  </head>
+  <body>
+
+    <!-- Browser-based map -->
+    <div id="map"></div>
+
+    <!-- AR Scene -->
+    <a-scene embedded
+             vr-mode-ui="enabled: false"
+             renderer="logarithmicDepthBuffer: true;"
+             arjs="trackingMethod: gps; sourceType: webcam; debugUIEnabled: false;">
+      
+      <a-camera gps-camera rotation-reader></a-camera>
+
+      <!-- ================= 3D GIS Utility Markers ================= -->
+      <a-box gps-entity-place="latitude:23.8103; longitude:90.4125"
+             color="blue" depth="1" height="2" width="1"></a-box>
+
+      <a-sphere gps-entity-place="latitude:23.8110; longitude:90.4130"
+                color="red" radius="1.2"></a-sphere>
+
+      <a-cone gps-entity-place="latitude:23.8115; longitude:90.4120"
+              color="yellow" radius-bottom="0.5" height="1.5"></a-cone>
+
+      <a-cylinder gps-entity-place="latitude:23.8108; longitude:90.4135"
+                  color="green" radius="0.4" height="1.5"></a-cylinder>
+
+      <a-box gps-entity-place="latitude:23.8112; longitude:90.4140"
+             color="purple" depth="0.8" height="1.5" width="0.8"></a-box>
+
+      <a-sphere gps-entity-place="latitude:23.8105; longitude:90.4142"
+                color="orange" radius="1"></a-sphere>
+
+      <a-cone gps-entity-place="latitude:23.8109; longitude:90.4128"
+              color="cyan" radius-bottom="0.4" height="1.2"></a-cone>
+
+      <a-cylinder gps-entity-place="latitude:23.8113; longitude:90.4132"
+                  color="magenta" radius="0.3" height="1.0"></a-cylinder>
+
+      <a-box gps-entity-place="latitude:23.8107; longitude:90.4120"
+             color="pink" depth="0.7" height="1.2" width="0.7"></a-box>
+
+      <a-sphere gps-entity-place="latitude:23.8111; longitude:90.4138"
+                color="lime" radius="0.9"></a-sphere>
+    </a-scene>
+
+    <script>
+      // ================= Leaflet Map =================
+      const map = L.map('map').setView([23.8103, 90.4125], 16); // Khulna center
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Optional: Leaflet markers same as AR markers
+      const arMarkers = [
+        {lat:23.8103, lng:90.4125, color:'blue'},
+        {lat:23.8110, lng:90.4130, color:'red'},
+        {lat:23.8115, lng:90.4120, color:'yellow'},
+        {lat:23.8108, lng:90.4135, color:'green'},
+        {lat:23.8112, lng:90.4140, color:'purple'},
+        {lat:23.8105, lng:90.4142, color:'orange'},
+        {lat:23.8109, lng:90.4128, color:'cyan'},
+        {lat:23.8113, lng:90.4132, color:'magenta'},
+        {lat:23.8107, lng:90.4120, color:'pink'},
+        {lat:23.8111, lng:90.4138, color:'lime'}
+      ];
+
+      arMarkers.forEach(m => {
+        L.circleMarker([m.lat, m.lng], {radius:8, color:m.color}).addTo(map);
+      });
+
+      // ================= Permission Check =================
+      async function checkPermissions() {
+        try {
+          const camPerm = await navigator.permissions.query({ name: "camera" });
+          if (camPerm.state !== "granted") alert("Camera permission needed.");
+
+          navigator.geolocation.getCurrentPosition(
+            (pos) => console.log("Location granted", pos.coords),
+            (err) => alert("Location permission needed.")
+          );
+        } catch(e) {
+          alert("Your browser may not support permissions.");
+        }
+      }
+      window.onload = checkPermissions;
+    </script>
+
+  </body>
+</html>
