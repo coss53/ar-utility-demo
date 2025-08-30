@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Underground Utilities — WebAR (GPS + 3D)</title>
+  <!-- A-Frame & AR.js (location-based) -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://rawcdn.githack.com/AR-js-org/AR.js/3.4.4/aframe/build/aframe-ar-nft.js"></script>
+  <style>
+    body, html { margin:0; padding:0; overflow:hidden; font-family: ui-sans-serif, system-ui; }
+    .hud { position: fixed; top: 10px; left: 10px; right: 10px; z-index: 20; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .card { background: rgba(0,0,0,.65); color: #fff; padding: 10px 12px; border-radius: 12px; backdrop-filter: blur(6px); }
+    .btn { cursor:pointer; background:#fff; color:#111; border:none; border-radius: 10px; padding: 8px 12px; font-weight:600; }
+    .badge { background:#00d38d; color:#041; border-radius:10px; padding: 4px 8px; font-weight:700; }
+    .legend { display:flex; gap:10px; align-items:center; }
+    .swatch { width:14px; height:14px; border-radius:4px; display:inline-block; }
+  </style>
+</head>
+<body>
+  <!-- Heads-up UI -->
+  <div class="hud">
+    <div class="card"><span class="badge">WebAR Demo</span> Underground utilities rendered at GPS coordinates (no app install).</div>
+    <div class="card legend">
+      <span class="swatch" style="background:#2e7cff"></span> Water
+      <span class="swatch" style="background:#f59e0b"></span> Gas
+      <span class="swatch" style="background:#ef4444"></span> Power
+      <span class="swatch" style="background:#10b981"></span> Fiber
+    </div>
+    <button id="btnLoad" class="btn">Load Sample GIS</button>
+    <button id="btnCenter" class="btn">Center on me</button>
+    <div id="status" class="card">Status: waiting for permission…</div>
+  </div>
+
+  <!-- AR Scene -->
+  <a-scene
+    vr-mode-ui="enabled: false"
+    renderer="antialias: true"
+    embedded
+    arjs="sourceType: camera; videoTexture: true; debugUIEnabled: false; trackingMethod: best;"
+    gps-camera rotation-reader id="gpsCam"
+  >
+    <a-entity id="markers"></a-entity>
+
+    <!-- minimal ground grid to aid depth perception (attached near user, hidden when far) -->
+    <a-entity id="grid" visible="false">
+      <a-entity geometry="primitive: plane; width: 6; height: 6"
+                rotation="-90 0 0"
+                material="color: #ffffff; opacity: 0.1"></a-entity>
+    </a-entity>
+
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    // --- Utility palette
+    const TYPE_STYLE = {
+      water:  { color: '#2e7cff', height: 0.5 },
+      gas:    { color: '#f59e0b', height: 0.5 },
+      power:  { color: '#ef4444', height: 0.5 },
+      fiber:  { color: '#10b981', height: 0.5 },
+      default:{ color: '#94a3b8', height: 0.4 }
+    };
+
+    // --- Sample GeoJSON-like features (underground utilities)
+    // In production, fetch from API/GeoServer/Mapbox tiles
+    const SAMPLE_GEOJSON = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { id: 'W-101', type: 'water', depth_m: 1.2 }, geometry: { type: 'Point', coordinates: [ 89.559950, 22.845640 ] } },
+        { type: 'Feature', properties: { id: 'G-201', type: 'gas',   depth_m: 0.7 }, geometry: { type: 'Point', coordinates: [ 89.559820, 22.845560 ] } },
+        { type: 'Feature', properties: { id: 'P-301', type: 'power', depth_m: 1.8 }, geometry: { type: 'Point', coordinates: [ 89.560050, 22.845520 ] } },
+        { type: 'Feature', properties: { id: 'F-401', type: 'fiber', depth_m: 0.4 }, geometry: { type: 'Point', coordinates: [ 89.559900, 22.845480 ] } }
+      ]
+    };
+
+    const statusEl = document.getElementById('status');
+    const markersRoot = document.getElementById('markers');
+    const gpsCam = document.getElementById('gpsCam');
+    const grid = document.getElementById('grid');
+
+    // Update live status
+    function setStatus(msg){ statusEl.textContent = 'Status: ' + msg; }
+
+    // Ask for location updates
+    if ('geolocation' in navigator){
+      navigator.geolocation.getCurrentPosition(
+        p => setStatus(`GPS ok — lat ${p.coords.latitude.toFixed(6)}, lon ${p.coords.longitude.toFixed(6)}`),
+        err => setStatus('GPS error: ' + err.message),
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      setStatus('Geolocation not supported');
+    }
+
+    // Button: Center grid on user (visual aid)
+    document.getElementById('btnCenter').addEventListener('click', () => {
+      if (!gpsCam.components['gps-camera'] || !gpsCam.components['gps-camera'].currentCoords){
+        setStatus('Waiting for GPS fix…');
+        return;
+      }
+      const { latitude, longitude } = gpsCam.components['gps-camera'].currentCoords;
+      grid.setAttribute('gps-entity-place', `latitude: ${latitude}; longitude: ${longitude}`);
+      grid.setAttribute('visible', 'true');
+      setStatus('Centered grid at your location');
+    });
+
+    // Button: Load sample utilities as 3D pins
+    document.getElementById('btnLoad').addEventListener('click', () => {
+      addFeatures(SAMPLE_GEOJSON.features);
+      setStatus('Loaded sample GIS features');
+    });
+
+    // Core: add 3D markers for each feature (Point)
+    function addFeatures(features){
+      features.forEach(f => {
+        if (f.geometry.type !== 'Point') return;
+        const [lon, lat] = f.geometry.coordinates;
+        const t = (f.properties.type || 'default').toLowerCase();
+        const style = TYPE_STYLE[t] || TYPE_STYLE.default;
+
+        // 3D pin: cylinder + billboard label
+        const holder = document.createElement('a-entity');
+        holder.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon}`);
+
+        const cyl = document.createElement('a-cylinder');
+        cyl.setAttribute('radius', 0.15);
+        cyl.setAttribute('height', style.height);
+        cyl.setAttribute('material', `color: ${style.color}; opacity: 0.9`);
+        cyl.setAttribute('position', '0 ' + (style.height/2).toFixed(2) + ' 0');
+        holder.appendChild(cyl);
+
+        const label = document.createElement('a-entity');
+        label.setAttribute('text', {
+          value: `${f.properties.id} (depth ${f.properties.depth_m}m)`,
+          align: 'center',
+          width: 3,
+          color: '#ffffff'
+        });
+        label.setAttribute('position', '0 ' + (style.height + 0.35).toFixed(2) + ' 0');
+        label.setAttribute('look-at', '[gps-camera]');
+        holder.appendChild(label);
+
+        // Optional: tap to open details panel
+        holder.addEventListener('click', () => {
+          alert(`${f.properties.id}\nType: ${t}\nDepth: ${f.properties.depth_m} m\nLat: ${lat}\nLon: ${lon}`);
+        });
+
+        markersRoot.appendChild(holder);
+      });
+    }
+  </script>
+
+  <!-- Tips:
+    1) Serve over HTTPS (required for camera + GPS): use GitHub Pages / Netlify / Vercel.
+    2) Grant camera + location permissions when prompted.
+    3) Replace SAMPLE_GEOJSON with your API endpoint (GeoJSON FeatureCollection with Point coords).
+    4) For real underground depth visualization, offset geometry vertically based on "depth_m" and add cross-section UI.
+  -->
+</body>
+</html>
